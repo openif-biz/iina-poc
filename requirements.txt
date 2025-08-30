@@ -1,0 +1,4 @@
+streamlit
+llama-cpp-python
+pandas
+google-cloud-storage

@@ -1,0 +1,18 @@
+﻿# Dockerイメージに含めないファイルやフォルダを指定
+
+# Python仮想環境
+venv/
+.venv/
+
+# ローカルのAIモデルフォルダ
+/models/
+
+# Pythonキャッシュ
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# OS固有のファイル
+.DS_Store
+Thumbs.db
