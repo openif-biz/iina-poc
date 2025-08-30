@@ -19,7 +19,7 @@ jobs:
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /home/okawa/iina_poc
+            cd ~/iina-poc
             git pull origin main
             docker-compose down
             docker-compose up -d --build
