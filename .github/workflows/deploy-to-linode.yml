@@ -1,0 +1,25 @@
+name: Deploy IINA to Linode
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Deploy to Linode via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: 172.237.4.248
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /home/okawa/iina_poc
+            git pull origin main
+            docker-compose down
+            docker-compose up -d --build
