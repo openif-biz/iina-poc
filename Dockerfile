@@ -1,29 +1,29 @@
-# ベースとなる公式Pythonイメージを選択
+# Step 1: ベースとなるPythonの環境を選択
+# slim版は、アプリケーションの実行に必要な最小限のファイルのみが含まれており、イメージサイズを小さく保てます。
 FROM python:3.10-slim
 
-# 作業ディレクトリを設定
+# Step 2: コンテナ内の作業ディレクトリを設定
+# これ以降のコマンドは、すべてこの /app ディレクトリ内で実行されます。
 WORKDIR /app
 
-# ビルドに必要なツールをインストール
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-# 必要なライブラリをインストールするため、requirements.txtを先にコピー
+# Step 3: 必要なライブラリの一覧ファイルをコピー
+# まずライブラリ一覧だけをコピーすることで、コードの変更時にもライブラリの再インストールをスキップでき、ビルドが高速になります。
 COPY requirements.txt .
 
-# pipをアップグレードし、requirements.txtに基づいてライブラリをインストール
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Step 4: 必要なライブラリをインストール
+# --no-cache-dir は、キャッシュを保存しないことで、最終的なイメージサイズをさらに小さくするおまじないです。
+RUN pip install --no-cache-dir -r requirements.txt
 
-# アプリケーションのソースコードをコピー
+# Step 5: アプリケーションのソースコードをすべてコピー
+# .dockerignoreファイルに記載されたものを除き、カレントディレクトリの全ファイルをコンテナの作業ディレクトリにコピーします。
 COPY . .
 
-# Streamlitが使用するポートを開放
+# Step 6: コンテナが使用するポートを外部に通知
+# このコンテナ内のアプリケーションが8080番ポートで待ち受けることを示します。
 EXPOSE 8080
 
-# コンテナ起動時に実行するコマンド
-# Cloud Runが提供するPORT環境変数を使用し、CORS保護を無効化
-CMD ["streamlit", "run", "app.py", "--server.port", "$PORT", "--server.enableCORS", "false", "--server.enableXsrfProtection", "false"]
+# Step 7: コンテナ起動時に実行するコマンドを定義
+# これが、アプリケーションを起動する最終的な命令です。
+# --server.port=8080: Streamlitが8080番ポートで起動するように明確に指定します。
+# --server.headless=true: サーバー環境で安定して動作させるための推奨設定です。
+CMD ["streamlit", "run", "app.py", "--server.port=8080", "--server.headless=true"]
