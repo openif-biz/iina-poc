@@ -1,39 +1,61 @@
-script: |
-  # --- 変数定義 ---
-  # プロジェクトのディレクトリパス
-  PROJECT_DIR="~/iina-poc"
-  # Docker Composeが使用するプロジェクト名 (フォルダ名と一致させるのが一般的)
-  PROJECT_NAME="iina-poc"
+name: Deploy to Linode
 
-  # --- スクリプト本体 ---
-  set -e
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
-  # ★★★【調査コマンド追加】★★★
-  # ログイン直後のホームディレクトリの状態を確認する
-  echo "Listing home directory contents..."
-  ls -la ~
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
 
-  # 1. プロジェクトディレクトリへ移動
-  echo "Changing to project directory..."
-  cd ${PROJECT_DIR}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-  # 2. GitHubから最新のソースコードを取得
-  echo "Fetching latest code from GitHub..."
-  git fetch origin main
-  git reset --hard origin/main
+      - name: Deploy to Linode via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.LINODE_HOST }}
+          username: root
+          key: ${{ secrets.LINODE_SSH_KEY }}
+          script: |
+            # --- 変数定義 ---
+            # プロジェクトのディレクトリパス
+            PROJECT_DIR="~/iina-poc"
+            # Docker Composeが使用するプロジェクト名 (フォルダ名と一致させるのが一般的)
+            PROJECT_NAME="iina-poc"
 
-  # 3. 既存のコンテナを停止・削除 (初回実行時は失敗するが || true で継続)
-  echo "Stopping old containers..."
-  sudo docker-compose -p ${PROJECT_NAME} down || true
+            # --- スクリプト本体 ---
+            set -e
 
-  # 4. 新しいイメージをビルド (ベースイメージの更新も確認)
-  echo "Building new containers..."
-  sudo docker-compose -p ${PROJECT_NAME} build --pull --force-rm
+            # ★★★【調査コマンド追加】★★★
+            # ログイン直後のホームディレクトリの状態を確認する
+            echo "Listing home directory contents..."
+            ls -la ~
 
-  # 5. 新しいコンテナを起動
-  echo "Starting new containers..."
-  sudo docker-compose -p ${PROJECT_NAME} up -d --remove-orphans
+            # 1. プロジェクトディレクトリへ移動
+            echo "Changing to project directory..."
+            cd ${PROJECT_DIR}
 
-  # 6. 不要になったDockerイメージをクリーンアップ (より安全な方法)
-  echo "Pruning unused Docker images..."
-  sudo docker image prune -f
+            # 2. GitHubから最新のソースコードを取得
+            echo "Fetching latest code from GitHub..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            # 3. 既存のコンテナを停止・削除 (初回実行時は失敗するが || true で継続)
+            echo "Stopping old containers..."
+            sudo docker-compose -p ${PROJECT_NAME} down || true
+
+            # 4. 新しいイメージをビルド (ベースイメージの更新も確認)
+            echo "Building new containers..."
+            sudo docker-compose -p ${PROJECT_NAME} build --pull --force-rm
+
+            # 5. 新しいコンテナを起動
+            echo "Starting new containers..."
+            sudo docker-compose -p ${PROJECT_NAME} up -d --remove-orphans
+
+            # 6. 不要になったDockerイメージをクリーンアップ (より安全な方法)
+            echo "Pruning unused Docker images..."
+            sudo docker image prune -f
