@@ -22,18 +22,11 @@ jobs:
           key: ${{ secrets.LINODE_SSH_KEY }}
           script: |
             # --- 変数定義 ---
-            # ★★★【修正点】★★★
-            # プロジェクトのディレクトリパスを、~ を使わない絶対パスに変更
             PROJECT_DIR="/root/iina-poc"
-            # Docker Composeが使用するプロジェクト名 (フォルダ名と一致させるのが一般的)
             PROJECT_NAME="iina-poc"
 
             # --- スクリプト本体 ---
             set -e
-            
-            # ログイン直後のホームディレクトリの状態を確認する (デバッグ用に残します)
-            echo "Listing home directory contents..."
-            ls -la /root
 
             # 1. プロジェクトディレクトリへ移動
             echo "Changing to project directory..."
@@ -44,10 +37,26 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            # 3. 既存のコンテナを停止・削除 (初回実行時は失敗するが || true で継続)
+            # ★★★【最終修正点】★★★
+            # 3. GitHub Secretsから秘密情報を読み込み、secrets.tomlファイルを作成
+            echo "Creating secrets.toml file..."
+            mkdir -p .streamlit
+            # JSON文字列を正しく扱うため、三重クォートで囲む
+            echo "GOOGLE_CREDENTIALS_JSON_STR = '''${{ secrets.GOOGLE_CREDENTIALS_JSON_STR }}'''" > .streamlit/secrets.toml
+            echo "TARGET_FOLDER_ID = '${{ secrets.TARGET_FOLDER_ID }}'" >> .streamlit/secrets.toml
+
+            # 4. 既存のコンテナを停止・削除
             echo "Stopping old containers..."
             sudo docker-compose -p ${PROJECT_NAME} down || true
 
-            # 4. 新しいイメージをビルド (ベースイメージの更新も確認)
+            # 5. 新しいイメージをビルド (キャッシュを使わずに再構築)
             echo "Building new containers..."
-            sudo docker-compose -p ${PROJECT_NAME} build --
+            sudo docker-compose -p ${PROJECT_NAME} build --no-cache
+
+            # 6. 新しいコンテナを起動
+            echo "Starting new containers..."
+            sudo docker-compose -p ${PROJECT_NAME} up -d
+
+            # 7. 不要になったDockerイメージをクリーンアップ
+            echo "Pruning unused Docker images..."
+            sudo docker image prune -f
