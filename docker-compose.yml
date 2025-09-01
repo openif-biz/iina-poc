@@ -11,7 +11,9 @@ services:
       - "80:8080"
     restart: always
     # ★★★【最終修正点】★★★
-    # This mounts the .streamlit directory from the host server into the container.
-    # This allows the app to read the secrets.toml file that will be created by the GitHub Actions workflow.
-    volumes:
-      - ./.streamlit:/app/.streamlit
+    # .streamlit/secrets.toml をマウントするvolumes設定を削除し、
+    # deploy-to-linode.ymlから渡される環境変数を直接コンテナに渡すように変更。
+    # これにより、より安全で標準的な方法で機密情報を扱える。
+    environment:
+      - GOOGLE_CREDENTIALS_JSON_STR
+      - TARGET_FOLDER_ID
