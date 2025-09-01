@@ -7,15 +7,11 @@ version: '3.8'
 services:
   app:
     build: .
-    # ★★★【最終修正点】★★★
-    # Ensures that traffic to port 80 on the host server is forwarded
-    # to port 8080 inside the container where the Streamlit app is running.
     ports:
       - "80:8080"
     restart: always
-    environment:
-      # This passes the service account key to the app inside the container.
-      - GOOGLE_APPLICATION_CREDENTIALS=/root/iina-key.json
+    # ★★★【最終修正点】★★★
+    # This mounts the .streamlit directory from the host server into the container.
+    # This allows the app to read the secrets.toml file that will be created by the GitHub Actions workflow.
     volumes:
-      # This mounts the key file from the host server into the container.
-      - /root/iina-key.json:/root/iina-key.json
+      - ./.streamlit:/app/.streamlit
