@@ -11,17 +11,27 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 import json
 import datetime
+import os # osモジュールをインポート
 
 # --- Configuration ---
-# These secrets are passed from docker-compose.yml as environment variables
-GOOGLE_CREDENTIALS_JSON_STR = st.secrets.get("GOOGLE_CREDENTIALS_JSON_STR", "{}")
-TARGET_FOLDER_ID = st.secrets.get("TARGET_FOLDER_ID", "") # The ID of the 'iina_inbox' folder on Google Drive
+# ★★★【最終修正点】★★★
+# st.secretsからではなく、os.environ（環境変数）から秘密情報を読み込むように変更
+GOOGLE_CREDENTIALS_JSON_STR = os.environ.get("GOOGLE_CREDENTIALS_JSON_STR", "{}")
+TARGET_FOLDER_ID = os.environ.get("TARGET_FOLDER_ID", "") # The ID of the 'iina_inbox' folder on Google Drive
 
 # --- Google Drive Authentication ---
 @st.cache_resource
 def get_gdrive_service():
     """Connects to Google Drive API using service account credentials."""
     try:
+        # Check if credentials are provided
+        if not GOOGLE_CREDENTIALS_JSON_STR or GOOGLE_CREDENTIALS_JSON_STR == "{}":
+            st.error("Google認証情報が設定されていません。")
+            return None
+        if not TARGET_FOLDER_ID:
+            st.error("Google DriveのフォルダIDが設定されていません。")
+            return None
+
         # Load credentials from the string
         creds_json = json.loads(GOOGLE_CREDENTIALS_JSON_STR)
         scopes = ['https://www.googleapis.com/auth/drive']
@@ -29,6 +39,9 @@ def get_gdrive_service():
         service = build('drive', 'v3', credentials=creds)
         st.success("Google Driveへの接続に成功しました。")
         return service
+    except json.JSONDecodeError:
+        st.error("Google認証情報のフォーマットが正しくありません。(JSON Decode Error)")
+        return None
     except Exception as e:
         st.error(f"Google Driveへの接続中にエラーが発生しました: {e}")
         st.error("認証情報(iina-key.json)の内容や、Google Drive APIの権限を確認してください。")
@@ -48,13 +61,13 @@ def save_to_drive(service, folder_id, filename, data):
         # Convert dictionary to a formatted string
         content = json.dumps(data, ensure_ascii=False, indent=2)
         media = googleapiclient.http.MediaIoBaseUpload(StringIO(content), mimetype='text/plain')
-
+        
         file = service.files().create(
             body=file_metadata,
             media_body=media,
             fields='id'
         ).execute()
-
+        
         return file.get('id')
     except Exception as e:
         st.error(f"Google Driveへのファイル保存中にエラーが発生しました: {e}")
@@ -70,7 +83,7 @@ gdrive_service = get_gdrive_service()
 if gdrive_service:
     with st.form("iina_reception_form"):
         st.header("自動化・効率化アンケート")
-
+        
         input_data = {}
         fields = {
             "インプット": "例: 各社オリジナル形式の請求書のPDF",
@@ -94,10 +107,10 @@ if gdrive_service:
         # Generate a unique filename with timestamp
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"iina_input_{timestamp}.txt"
-
+        
         with st.spinner(f"データをGoogle Driveに安全に送信しています..."):
             file_id = save_to_drive(gdrive_service, TARGET_FOLDER_ID, filename, input_data)
-
+        
         if file_id:
             st.success("お客様の課題を承りました。")
             st.info("ローカルPC上のIINAエンジンが、間もなく分析を開始します。")
