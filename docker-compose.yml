@@ -2,6 +2,7 @@
 # PURPOSE: To define and run the multi-container Docker application for IINA PoC.
 # DESIGNER: Yuki (Project Owner)
 # ENGINEER: Gemini (Chief Engineer)
+# STRATEGY: This version uses volumes and environment variables to securely provide credentials to the app.
 version: '3.8'
 
 services:
@@ -10,6 +11,7 @@ services:
     ports:
       - "80:8080"
     restart: always
+    # ★★★【最終修正点】★★★
     # サーバー上のiina-key.jsonを、コンテナ内の/app/iina-key.jsonとして設置する(読み取り専用:ro)
     volumes:
       - /root/iina-key.json:/app/iina-key.json:ro
@@ -18,5 +20,6 @@ services:
       # Googleのライブラリは、この環境変数が設定されていると、自動的にキーファイルを読み込む
       - GOOGLE_APPLICATION_CREDENTIALS=/app/iina-key.json
       # アプリがGoogle DriveのフォルダIDを知るための環境変数
+      # この値は、deploy-to-linode.ymlから実行時に渡される
       - TARGET_FOLDER_ID
 
