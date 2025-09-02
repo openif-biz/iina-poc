@@ -11,9 +11,12 @@ services:
       - "80:8080"
     restart: always
     # ★★★【最終修正点】★★★
-    # .streamlit/secrets.toml をマウントするvolumes設定を削除し、
-    # deploy-to-linode.ymlから渡される環境変数を直接コンテナに渡すように変更。
-    # これにより、より安全で標準的な方法で機密情報を扱える。
+    # サーバー上のiina-key.jsonを、コンテナ内の/app/iina-key.jsonとして設置する(読み取り専用:ro)
+    volumes:
+      - /root/iina-key.json:/app/iina-key.json:ro
+    # アプリケーションに、2つの秘密情報を環境変数として渡す
     environment:
-      - GOOGLE_CREDENTIALS_JSON_STR
+      # Googleのライブラリは、この環境変数が設定されていると、自動的にキーファイルを読み込む
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/iina-key.json
+      # アプリがGoogle DriveのフォルダIDを知るための環境変数
       - TARGET_FOLDER_ID
