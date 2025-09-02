@@ -21,8 +21,6 @@ GOOGLE_APPLICATION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"
 def get_gdrive_service():
     """Connects to Google Drive API using Application Default Credentials."""
     try:
-        # The Google library now automatically finds and uses the credentials file
-        # pointed to by the GOOGLE_APPLICATION_CREDENTIALS environment variable.
         scopes = ['https://www.googleapis.com/auth/drive']
         
         if not GOOGLE_APPLICATION_CREDENTIALS:
@@ -96,11 +94,17 @@ if gdrive_service:
             "アウトプット": "例: 請求台帳に指定項目をGoogleスプレッドシートへ入力"
         }
 
-        for field, placeholder in fields.items():
+        # ★★★【最終UI修正点】★★★
+        # 記入例と入力欄を分離する
+        for field, caption_text in fields.items():
+            st.subheader(field)
+            st.caption(caption_text)
+            unique_key = f"input_{field}"
             if field in ["現状", "課題", "目的", "理想の状態", "アウトプット"]:
-                input_data[field] = st.text_area(field, placeholder=placeholder)
+                input_data[field] = st.text_area(unique_key, label_visibility="collapsed")
             else:
-                input_data[field] = st.text_input(field, placeholder=placeholder)
+                input_data[field] = st.text_input(unique_key, label_visibility="collapsed")
+        # ★★★★★★★★★★★★★★★
 
         submitted = st.form_submit_button("IINAに送信する", type="primary")
 
