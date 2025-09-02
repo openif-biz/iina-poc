@@ -2,8 +2,6 @@
 # PURPOSE: IINA PoC Web Frontend (Reception Desk)
 # DESIGNER: Yuki (Project Owner)
 # ENGINEER: Gemini (Chief Engineer)
-# ARCHITECTURE: This app runs on a Linode server, captures user input via a Streamlit form,
-# and saves the data as a text file to a shared Google Drive folder for processing by a local AI engine.
 
 import streamlit as st
 import gspread
@@ -11,40 +9,40 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 import json
 import datetime
-import os # osモジュールをインポート
+import os
 
 # --- Configuration ---
-# ★★★【最終修正点】★★★
-# st.secretsからではなく、os.environ（環境変数）から秘密情報を読み込むように変更
-GOOGLE_CREDENTIALS_JSON_STR = os.environ.get("GOOGLE_CREDENTIALS_JSON_STR", "{}")
-TARGET_FOLDER_ID = os.environ.get("TARGET_FOLDER_ID", "") # The ID of the 'iina_inbox' folder on Google Drive
+# These environment variables are set by docker-compose.yml
+TARGET_FOLDER_ID = os.environ.get("TARGET_FOLDER_ID", "")
+GOOGLE_APPLICATION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
 
 # --- Google Drive Authentication ---
 @st.cache_resource
 def get_gdrive_service():
-    """Connects to Google Drive API using service account credentials."""
+    """Connects to Google Drive API using Application Default Credentials."""
     try:
-        # Check if credentials are provided
-        if not GOOGLE_CREDENTIALS_JSON_STR or GOOGLE_CREDENTIALS_JSON_STR == "{}":
-            st.error("Google認証情報が設定されていません。")
-            return None
-        if not TARGET_FOLDER_ID:
-            st.error("Google DriveのフォルダIDが設定されていません。")
-            return None
-
-        # Load credentials from the string
-        creds_json = json.loads(GOOGLE_CREDENTIALS_JSON_STR)
+        # The Google library now automatically finds and uses the credentials file
+        # pointed to by the GOOGLE_APPLICATION_CREDENTIALS environment variable.
         scopes = ['https://www.googleapis.com/auth/drive']
-        creds = Credentials.from_service_account_info(creds_json, scopes=scopes)
+        
+        if not GOOGLE_APPLICATION_CREDENTIALS:
+             st.error("Google認証情報(GOOGLE_APPLICATION_CREDENTIALS)が設定されていません。")
+             return None
+
+        creds = Credentials.from_service_account_file(
+            GOOGLE_APPLICATION_CREDENTIALS,
+            scopes=scopes
+        )
         service = build('drive', 'v3', credentials=creds)
         st.success("Google Driveへの接続に成功しました。")
         return service
-    except json.JSONDecodeError:
-        st.error("Google認証情報のフォーマットが正しくありません。(JSON Decode Error)")
+    except FileNotFoundError:
+        st.error(f"認証ファイルが見つかりません: {GOOGLE_APPLICATION_CREDENTIALS}")
+        st.error("サーバー上にiina-key.jsonが正しく配置されているか確認してください。")
         return None
     except Exception as e:
         st.error(f"Google Driveへの接続中にエラーが発生しました: {e}")
-        st.error("認証情報(iina-key.json)の内容や、Google Drive APIの権限を確認してください。")
+        st.error("認証情報(iina-key.json)の内容や、Google Drive APIの権限、フォルダの共有設定を確認してください。")
         return None
 
 # --- Function to save data to Google Drive ---
@@ -54,11 +52,14 @@ def save_to_drive(service, folder_id, filename, data):
         from io import StringIO
         import googleapiclient.http
 
+        if not folder_id:
+            st.error("保存先のGoogle Drive フォルダIDが設定されていません。")
+            return None
+
         file_metadata = {
             'name': filename,
             'parents': [folder_id]
         }
-        # Convert dictionary to a formatted string
         content = json.dumps(data, ensure_ascii=False, indent=2)
         media = googleapiclient.http.MediaIoBaseUpload(StringIO(content), mimetype='text/plain')
         
@@ -104,7 +105,6 @@ if gdrive_service:
         submitted = st.form_submit_button("IINAに送信する", type="primary")
 
     if submitted:
-        # Generate a unique filename with timestamp
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"iina_input_{timestamp}.txt"
         
@@ -119,3 +119,4 @@ if gdrive_service:
             st.error("送信に失敗しました。お手数ですが、もう一度お試しください。")
 else:
     st.warning("現在、受付システムがメンテナンス中です。しばらくしてから再度お試しください。")
+
