@@ -10,7 +10,6 @@ services:
     ports:
       - "80:8080"
     restart: always
-    # ★★★【最終修正点】★★★
     # サーバー上のiina-key.jsonを、コンテナ内の/app/iina-key.jsonとして設置する(読み取り専用:ro)
     volumes:
       - /root/iina-key.json:/app/iina-key.json:ro
@@ -20,3 +19,4 @@ services:
       - GOOGLE_APPLICATION_CREDENTIALS=/app/iina-key.json
       # アプリがGoogle DriveのフォルダIDを知るための環境変数
       - TARGET_FOLDER_ID
+
