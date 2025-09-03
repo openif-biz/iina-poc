@@ -1,5 +1,4 @@
 name: Deploy to Linode
-
 on:
   push:
     branches:
@@ -24,7 +23,6 @@ jobs:
             # --- 変数定義 ---
             PROJECT_DIR="/root/iina-poc"
             PROJECT_NAME="iina-poc"
-
             # --- スクリプト本体 ---
             set -e
             
