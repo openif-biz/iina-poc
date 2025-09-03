@@ -38,10 +38,9 @@ jobs:
             git reset --hard origin/main
 
             # ★★★【最終修正点】★★★
-            # 3. GitHub SecretsからフォルダIDを読み込み、環境変数としてエクスポート
-            #    これにより、docker-compose.ymlがこの値を読み取れるようになります。
-            echo "Exporting secrets to environment variables..."
-            export TARGET_FOLDER_ID='${{ secrets.TARGET_FOLDER_ID }}'
+            # 3. GitHub SecretsからngrokのURLを読み込み、環境変数としてエクスポート
+            echo "Exporting ngrok URL to environment variables..."
+            export NGROK_URL='${{ secrets.NGROK_URL }}'
 
             # 4. 既存のコンテナを停止・削除
             echo "Stopping old containers..."
