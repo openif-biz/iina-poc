@@ -1,97 +1,37 @@
-# FILE: app.py
-# PURPOSE: IINA PoC Web Frontend (Reception Desk)
+# FILE: app.py (Linode Web Frontend - Direct Forwarding Version)
+# PURPOSE: To act as a reception desk on the Linode server.
 # DESIGNER: Yuki (Project Owner)
 # ENGINEER: Gemini (Chief Engineer)
-# STRATEGY: This version reads the credentials from a file path specified by an environment variable,
-#           which is the industry standard and most robust method.
+# ARCHITECTURE: This app captures user input via a Streamlit form and forwards it directly
+# to the local IINA engine running on the user's PC via an ngrok tunnel.
 
 import streamlit as st
-import gspread
-from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
+import requests
 import json
-import datetime
 import os
 
 # --- Configuration ---
-# These environment variables are set by docker-compose.yml
-# The Google library will automatically find and use this file.
-GOOGLE_APPLICATION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
-TARGET_FOLDER_ID = os.environ.get("TARGET_FOLDER_ID", "")
-
-# --- Google Drive Authentication ---
-@st.cache_resource
-def get_gdrive_service():
-    """Connects to Google Drive API using Application Default Credentials."""
-    try:
-        # Check if the environment variable is set
-        if not GOOGLE_APPLICATION_CREDENTIALS:
-             st.error("Google認証情報ファイルへのパス(GOOGLE_APPLICATION_CREDENTIALS)が設定されていません。")
-             return None
-
-        scopes = ['https://www.googleapis.com/auth/drive']
-        
-        # Load credentials directly from the service account file
-        creds = Credentials.from_service_account_file(
-            GOOGLE_APPLICATION_CREDENTIALS,
-            scopes=scopes
-        )
-        service = build('drive', 'v3', credentials=creds)
-        st.success("Google Driveへの接続に成功しました。")
-        return service
-    except FileNotFoundError:
-        st.error(f"認証ファイルが見つかりません: {GOOGLE_APPLICATION_CREDENTIALS}")
-        st.error("サーバー上にiina-key.jsonが正しく配置されているか、docker-compose.ymlのvolumes設定を確認してください。")
-        return None
-    except Exception as e:
-        st.error(f"Google Driveへの接続中にエラーが発生しました: {e}")
-        st.error("認証情報(iina-key.json)の内容や、Google Drive APIの権限、フォルダの共有設定を確認してください。")
-        return None
-
-# --- Function to save data to Google Drive ---
-def save_to_drive(service, folder_id, filename, data):
-    """Saves a dictionary as a text file to the specified Google Drive folder."""
-    try:
-        from io import StringIO
-        import googleapiclient.http
-
-        if not folder_id:
-            st.error("保存先のGoogle Drive フォルダIDが設定されていません。")
-            return None
-
-        file_metadata = {
-            'name': filename,
-            'parents': [folder_id]
-        }
-        # Convert dictionary to a formatted string with Japanese characters handled correctly
-        content = json.dumps(data, ensure_ascii=False, indent=2)
-        media = googleapiclient.http.MediaIoBaseUpload(StringIO(content), mimetype='text/plain; charset=utf-8')
-        
-        file = service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id'
-        ).execute()
-        
-        return file.get('id')
-    except Exception as e:
-        st.error(f"Google Driveへのファイル保存中にエラーが発生しました: {e}")
-        return None
+# The ngrok URL is now the single most important secret.
+# It will be passed as an environment variable from the GitHub Actions workflow.
+NGROK_URL = os.environ.get("NGROK_URL", "")
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="IINA PoC - 受付", layout="wide")
 st.title("IINA PoC - 課題受付フォーム")
 st.markdown("AIコンサルタントIINAが分析するため、以下のアンケートにご協力ください。")
 
-gdrive_service = get_gdrive_service()
+if not NGROK_URL:
+    st.error("ローカルAIエンジンへの接続トンネル(ngrok URL)が設定されていません。")
+    st.warning("現在、受付システムがメンテナンス中です。しばらくしてから再度お試しください。")
+else:
+    st.success("ローカルAIエンジンへの接続準備が完了しました。")
 
-if gdrive_service:
     with st.form("iina_reception_form"):
         st.header("自動化・効率化アンケート")
-        
+
         input_data = {}
         fields = {
-            "インプット": "例: 各社オリジナル形式の請求書のPDF",
+            "インププット": "例: 各社オリジナル形式の請求書のPDF",
             "現状": "例: 一帳票づつ読取って手作業での入力に時間がかかっている",
             "課題": "例: 入力ミスが多く、確認作業に追われ、他の業務が滞る",
             "目的": "例: 差配対応などのマネジメントに集中したい",
@@ -109,21 +49,28 @@ if gdrive_service:
             else:
                 input_data[field] = st.text_input(unique_key, label_visibility="collapsed")
 
-        submitted = st.form_submit_button("IINAに送信する", type="primary")
+        submitted = st.form_submit_button("ローカルIINAに送信する", type="primary")
 
     if submitted:
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"iina_input_{timestamp}.txt"
-        
-        with st.spinner(f"データをGoogle Driveに安全に送信しています..."):
-            file_id = save_to_drive(gdrive_service, TARGET_FOLDER_ID, filename, input_data)
-        
-        if file_id:
-            st.success("お客様の課題を承りました。")
-            st.info("ローカルPC上のIINAエンジンが、間もなく分析を開始します。")
-            st.balloons()
+        # Check if all fields are empty
+        if all(value == "" for value in input_data.values()):
+            st.warning("分析を開始するには、いずれかの項目に内容を入力してください。")
         else:
-            st.error("送信に失敗しました。お手数ですが、もう一度お試しください。")
-else:
-    st.warning("現在、受付システムがメンテナンス中です。しばらくしてから再度お試しください。")
+            with st.spinner("お客様の声をローカルAIエンジンに安全に送信しています..."):
+                try:
+                    # Send the data as a JSON payload to the ngrok URL
+                    api_endpoint = f"{NGROK_URL}/process" # Assuming the local app has a /process endpoint
+                    response = requests.post(api_endpoint, json=input_data, timeout=60)
+                    response.raise_for_status() 
+
+                    st.success("ローカルAIエンジンからの応答を受信しました！")
+                    st.header("IINAによる分析結果")
+                    
+                    analysis_result = response.json()
+                    st.json(analysis_result)
+                    st.balloons()
+
+                except requests.exceptions.RequestException as e:
+                    st.error(f"ローカルAIエンジンへの送信中にエラーが発生しました: {e}")
+                    st.error("ヒント: ローカルPCでngrokとstreamlitアプリが両方とも起動しているか確認してください。")
 
