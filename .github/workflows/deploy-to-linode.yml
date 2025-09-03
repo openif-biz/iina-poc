@@ -37,24 +37,19 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            # ★★★【最終修正点】★★★
-            # 3. GitHub SecretsからngrokのURLを読み込み、環境変数としてエクスポート
-            echo "Exporting ngrok URL to environment variables..."
-            export NGROK_URL='${{ secrets.NGROK_URL }}'
-
-            # 4. 既存のコンテナを停止・削除
+            # 3. 既存のコンテナを停止・削除
             echo "Stopping old containers..."
             sudo docker-compose -p ${PROJECT_NAME} down --remove-orphans || true
 
-            # 5. 新しいイメージをビルド
+            # 4. 新しいイメージをビルド
             echo "Building new containers..."
             sudo docker-compose -p ${PROJECT_NAME} build --no-cache
 
-            # 6. 新しいコンテナを起動 (エクスポートした環境変数が引き継がれます)
+            # 5. 新しいコンテナを起動 (NGROK_URLを1行で渡す)
             echo "Starting new containers..."
-            sudo docker-compose -p ${PROJECT_NAME} up -d
+            NGROK_URL='${{ secrets.NGROK_URL }}' \
+            sudo -E docker-compose -p ${PROJECT_NAME} up -d
 
-            # 7. 不要になったDockerイメージをクリーンアップ
+            # 6. 不要になったDockerイメージをクリーンアップ
             echo "Pruning unused Docker images..."
             sudo docker image prune -f
-
