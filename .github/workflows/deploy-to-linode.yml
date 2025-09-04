@@ -38,15 +38,20 @@ jobs:
             # 3. 既存のコンテナを停止・削除
             echo "Stopping old containers..."
             sudo docker-compose -p ${PROJECT_NAME} down --remove-orphans || true
+            
+            # ---【★★ここが最終修正点★★】---
+            # 4. 古いイメージを強制的に削除（キャッシュ対策）
+            echo "Forcefully removing old image to prevent caching issues..."
+            sudo docker image rm ${PROJECT_NAME}_app || true
 
-            # 4. 新しいイメージをビルド
-            echo "Building new containers..."
+            # 5. 新しいイメージをビルド
+            echo "Building new image..."
             sudo docker-compose -p ${PROJECT_NAME} build --no-cache
 
-            # 5. 新しいコンテナを起動 (NGROK_URLは不要になりました)
-            echo "Starting new containers..."
+            # 6. 新しいコンテナを起動
+            echo "Starting new container..."
             sudo docker-compose -p ${PROJECT_NAME} up -d
 
-            # 6. 不要になったDockerイメージをクリーンアップ
+            # 7. 不要になったDockerイメージをクリーンアップ
             echo "Pruning unused Docker images..."
             sudo docker image prune -f
