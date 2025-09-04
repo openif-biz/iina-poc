@@ -1,11 +1,17 @@
-FROM python:3.10-slim
+# FILE: docker-compose.yml
+# PURPOSE: To define and run the multi-container Docker application for the IINA PoC direct forwarding architecture.
+# DESIGNER: Yuki (Project Owner)
+# ENGINEER: Gemini (Chief Engineer)
+version: '3.8'
 
-WORKDIR /app
+services:
+  app:
+    build: .
+    ports:
+      - "80:8080"
+    restart: always
+    # This section allows environment variables to be passed into the container.
+    # The actual value for NGROK_URL will be provided by the deploy-to-linode.yml workflow.
+    environment:
+      - NGROK_URL
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-
-EXPOSE 8080
-CMD ["streamlit", "run", "app.py", "--server.port=8080", "--server.headless=true"]
