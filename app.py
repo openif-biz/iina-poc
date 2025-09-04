@@ -10,7 +10,7 @@ from pathlib import Path
 
 st.set_page_config(page_title="IINA PoC", page_icon="🤖", layout="wide")
 
-# --- セッション初期化 ---
+# --- Session State Initialization ---
 if "step" not in st.session_state:
     st.session_state.step = 1
 if "analysis" not in st.session_state:
@@ -20,11 +20,10 @@ if "proposal" not in st.session_state:
 if "io_spec" not in st.session_state:
     st.session_state.io_spec = None
 
-# --- ダミー分析器（あとであなたのLLM呼び出しに差し替え） ---
+# --- Dummy Analyzer (to be replaced with your LLM call) ---
 def analyze_first_prompt(user_text: str) -> dict:
-    # ★ここをあなたのモデル呼び出しに置換（llama/StarCoderなど）
-    # まずはUI検証用の固定出力にしておく
-    time.sleep(3) # AIが考えているように見せるための待機
+    # This is a placeholder. Replace this with your actual model call (llama/StarCoder etc.)
+    time.sleep(2) # Simulate AI thinking
     flow = [
         "ユーザー入力の正規化",
         "ルール抽出（IN/OUT/TOの初期推定）",
@@ -41,7 +40,7 @@ def analyze_first_prompt(user_text: str) -> dict:
         "proposals": proposals,
     }
 
-# --- JSON保存（SAVAN引き渡し用） ---
+# --- JSON Saver (for SAVAN handoff) ---
 def save_handoff(obj: dict, prefix: str) -> Path:
     out_dir = Path("./handoff")
     out_dir.mkdir(exist_ok=True)
@@ -50,11 +49,11 @@ def save_handoff(obj: dict, prefix: str) -> Path:
     p.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
     return p
 
-# --- ヘッダ ---
+# --- Header ---
 st.title("IINA PoC（2ステップUI）")
 st.caption("Step1: 分析 → Step2: 提案＆簡易フロー → 同意なら仕様ヒアリング（IN/OUT/TO）→ SAVANへハンドオフ")
 
-# ========== STEP 1: ユーザー入力 & 分析 ==========
+# ========== STEP 1: User Input & Analysis ==========
 if st.session_state.step == 1:
     st.subheader("Step 1｜課題入力")
     user_text = st.text_area(
@@ -78,8 +77,7 @@ if st.session_state.step == 1:
             st.session_state.clear()
             st.rerun()
 
-
-# ========== STEP 2: 提案概要 & 簡易フロー表示 ==========
+# ========== STEP 2: Proposal & Flow Display ==========
 elif st.session_state.step == 2:
     a = st.session_state.analysis
     if not a:
@@ -113,7 +111,7 @@ elif st.session_state.step == 2:
                 st.session_state.step = 1
                 st.rerun()
 
-# ========== STEP 3: 第2プロンプト（IN/OUT/TOヒアリング） ==========
+# ========== STEP 3: Second Prompt (IN/OUT/TO Hearing) ==========
 elif st.session_state.step == 3:
     st.subheader("Step 3｜仕様ヒアリング（IN / OUT / TO）")
     with st.form("io_form", clear_on_submit=False):
@@ -136,7 +134,7 @@ elif st.session_state.step == 3:
         submitted = st.form_submit_button("仕様を確定してSAVANへ渡す")
     if submitted:
         spec = {
-            "analysis": st.session_state.analysis,  # 第1結果を同梱
+            "analysis": st.session_state.analysis,
             "io_spec": {
                 "IN": in_desc,
                 "OUT": out_desc,
@@ -155,3 +153,4 @@ elif st.session_state.step == 3:
         if st.button("最初の画面へ戻る"):
             st.session_state.clear()
             st.rerun()
+
