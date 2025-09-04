@@ -1,14 +1,11 @@
-# FILE: docker-compose.yml
-# PURPOSE: To define and run the self-contained IINA 2-Step UI application.
-# DESIGNER: Yuki (Project Owner)
-# ENGINEER: Gemini (Chief Engineer)
 version: '3.8'
-
 services:
   app:
     build: .
     ports:
       - "80:8080"
     restart: always
-    # This application is self-contained and does not require external environment variables.
-
+    # ---【★★ここが最終修正点★★】---
+    # .env ファイルを読み込み、コンテナの環境変数として設定する
+    env_file:
+      - .env
