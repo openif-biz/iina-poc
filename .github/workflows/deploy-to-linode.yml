@@ -1,5 +1,4 @@
 name: Deploy to Linode
-
 on:
   push:
     branches:
@@ -24,7 +23,6 @@ jobs:
             # --- 変数定義 ---
             PROJECT_DIR="/root/iina-poc"
             PROJECT_NAME="iina-poc"
-
             # --- スクリプト本体 ---
             set -e
             
@@ -36,21 +34,25 @@ jobs:
             echo "Fetching latest code from GitHub..."
             git fetch origin main
             git reset --hard origin/main
-            
+
             # 3. 既存のコンテナを停止・削除
             echo "Stopping old containers..."
             sudo docker-compose -p ${PROJECT_NAME} down --remove-orphans || true
+            
+            # 4. 古いイメージを強制的に削除（キャッシュ対策）
+            echo "Forcefully removing old image to prevent caching issues..."
+            sudo docker image rm ${PROJECT_NAME}_app || true
 
-            # 4. 新しいイメージをビルド
-            echo "Building new containers..."
+            # 5. 新しいイメージをビルド
+            echo "Building new image..."
             sudo docker-compose -p ${PROJECT_NAME} build --no-cache
 
-            # ★★★【最終修正点】★★★
-            # 5. 新しいコンテナを起動 (GitHub Secretsの値を環境変数として直接渡す)
-            echo "Starting new containers with ngrok URL..."
-            NGROK_URL='${{ secrets.NGROK_URL }}' sudo docker-compose -p ${PROJECT_NAME} up -d
+            # ---【★★ここが最終修正点★★】---
+            # 6. 新しいコンテナを起動 (NGROK_URLを正しく渡す)
+            echo "Starting new container with NGROK_URL..."
+            NGROK_URL='${{ secrets.NGROK_URL }}' \
+            sudo -E docker-compose -p ${PROJECT_NAME} up -d
 
-            # 6. 不要になったDockerイメージをクリーンアップ
+            # 7. 不要になったDockerイメージをクリーンアップ
             echo "Pruning unused Docker images..."
             sudo docker image prune -f
-
