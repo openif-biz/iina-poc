@@ -43,10 +43,9 @@ jobs:
             echo "Building new containers..."
             sudo docker-compose -p ${PROJECT_NAME} build --no-cache
 
-            # 5. 新しいコンテナを起動 (NGROK_URLを1行で渡す)
+            # 5. 新しいコンテナを起動 (NGROK_URLは不要になりました)
             echo "Starting new containers..."
-            NGROK_URL='${{ secrets.NGROK_URL }}' \
-            sudo -E docker-compose -p ${PROJECT_NAME} up -d
+            sudo docker-compose -p ${PROJECT_NAME} up -d
 
             # 6. 不要になったDockerイメージをクリーンアップ
             echo "Pruning unused Docker images..."
