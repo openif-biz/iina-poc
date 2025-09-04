@@ -1,76 +1,157 @@
-# FILE: app.py (Linode Web Frontend - Direct Forwarding Version)
-# PURPOSE: To act as a reception desk on the Linode server.
-# DESIGNER: Yuki (Project Owner)
+# FILE: app.py (2-Step UI with Dummy Analyzer)
+# PURPOSE: To verify the multi-step UI flow on the Linode server.
+# DESIGNER: Yuki (Project Owner) & ChatGPT
 # ENGINEER: Gemini (Chief Engineer)
-# ARCHITECTURE: This app captures user input via a Streamlit form and forwards it directly
-# to the local IINA engine running on the user's PC via an ngrok tunnel.
 
-import streamlit as st
-import requests
 import json
-import os
+import time
+import streamlit as st
+from pathlib import Path
 
-# --- Configuration ---
-# The ngrok URL is now the single most important secret.
-# It will be passed as an environment variable from the GitHub Actions workflow.
-NGROK_URL = os.environ.get("NGROK_URL", "")
+st.set_page_config(page_title="IINA PoC", page_icon="🤖", layout="wide")
 
-# --- Streamlit UI ---
-st.set_page_config(page_title="IINA PoC - 受付", layout="wide")
-st.title("IINA PoC - 課題受付フォーム")
-st.markdown("AIコンサルタントIINAが分析するため、以下のアンケートにご協力ください。")
+# --- セッション初期化 ---
+if "step" not in st.session_state:
+    st.session_state.step = 1
+if "analysis" not in st.session_state:
+    st.session_state.analysis = None
+if "proposal" not in st.session_state:
+    st.session_state.proposal = None
+if "io_spec" not in st.session_state:
+    st.session_state.io_spec = None
 
-if not NGROK_URL:
-    st.error("ローカルAIエンジンへの接続トンネル(ngrok URL)が設定されていません。")
-    st.warning("現在、受付システムがメンテナンス中です。しばらくしてから再度お試しください。")
-else:
-    st.success("ローカルAIエンジンへの接続準備が完了しました。")
+# --- ダミー分析器（あとであなたのLLM呼び出しに差し替え） ---
+def analyze_first_prompt(user_text: str) -> dict:
+    # ★ここをあなたのモデル呼び出しに置換（llama/StarCoderなど）
+    # まずはUI検証用の固定出力にしておく
+    time.sleep(3) # AIが考えているように見せるための待機
+    flow = [
+        "ユーザー入力の正規化",
+        "ルール抽出（IN/OUT/TOの初期推定）",
+        "自動化候補タスクの列挙",
+        "最小構成PoCの提示",
+    ]
+    proposals = [
+        "無料ツール中心での最小自動化（Zapier無料枠やローカルスクリプト）",
+        "将来拡張: 有料API連携でスケール（Gmail API / Slack / ストレージ等）",
+    ]
+    return {
+        "summary": f"要点要約（ダミー）: {user_text[:60]}...",
+        "flow": flow,
+        "proposals": proposals,
+    }
 
-    with st.form("iina_reception_form"):
-        st.header("自動化・効率化アンケート")
+# --- JSON保存（SAVAN引き渡し用） ---
+def save_handoff(obj: dict, prefix: str) -> Path:
+    out_dir = Path("./handoff")
+    out_dir.mkdir(exist_ok=True)
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    p = out_dir / f"{prefix}_{ts}.json"
+    p.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    return p
 
-        input_data = {}
-        fields = {
-            "インププット": "例: 各社オリジナル形式の請求書のPDF",
-            "現状": "例: 一帳票づつ読取って手作業での入力に時間がかかっている",
-            "課題": "例: 入力ミスが多く、確認作業に追われ、他の業務が滞る",
-            "目的": "例: 差配対応などのマネジメントに集中したい",
-            "理想の状態": "例: 進行中の全受注案件の進捗管理の精度を上げる",
-            "制約条件": "例: 新たな有料サービスを利用することは望まない",
-            "アウトプット": "例: 請求台帳に指定項目をGoogleスプレッドシートへ入力"
-        }
+# --- ヘッダ ---
+st.title("IINA PoC（2ステップUI）")
+st.caption("Step1: 分析 → Step2: 提案＆簡易フロー → 同意なら仕様ヒアリング（IN/OUT/TO）→ SAVANへハンドオフ")
 
-        for field, caption_text in fields.items():
-            st.subheader(field)
-            st.caption(caption_text)
-            unique_key = f"input_{field}"
-            if field in ["現状", "課題", "目的", "理想の状態", "アウトプット"]:
-                input_data[field] = st.text_area(unique_key, label_visibility="collapsed")
+# ========== STEP 1: ユーザー入力 & 分析 ==========
+if st.session_state.step == 1:
+    st.subheader("Step 1｜課題入力")
+    user_text = st.text_area(
+        "あなたの業務課題や自動化したいことを日本語で書いてください。",
+        height=180,
+        key="first_prompt_text",
+        placeholder="例）毎朝の売上CSV集計→グラフ→Slack共有を自動化したい… など",
+    )
+    col1, col2 = st.columns([1,1])
+    with col1:
+        if st.button("分析する（第1プロンプト）", type="primary", use_container_width=True):
+            if not user_text.strip():
+                st.warning("入力が空です。内容を入力してください。")
             else:
-                input_data[field] = st.text_input(unique_key, label_visibility="collapsed")
+                with st.spinner("IINAが分析中です..."):
+                    st.session_state.analysis = analyze_first_prompt(user_text.strip())
+                st.session_state.step = 2
+                st.rerun()
+    with col2:
+        if st.button("リセット", use_container_width=True):
+            st.session_state.clear()
+            st.rerun()
 
-        submitted = st.form_submit_button("ローカルIINAに送信する", type="primary")
 
+# ========== STEP 2: 提案概要 & 簡易フロー表示 ==========
+elif st.session_state.step == 2:
+    a = st.session_state.analysis
+    if not a:
+        st.warning("分析結果が見つかりません。Step1からやり直してください。")
+        if st.button("Step1へ戻る"):
+            st.session_state.step = 1
+            st.rerun()
+    else:
+        st.subheader("Step 2｜提案概要 & 簡易フロー（第1結果の可視化）")
+        with st.expander("要点要約", expanded=True):
+            st.write(a["summary"])
+        colA, colB = st.columns([1,1])
+        with colA:
+            st.markdown("#### 簡易フロー")
+            for i, step in enumerate(a["flow"], 1):
+                st.write(f"{i}. {step}")
+        with colB:
+            st.markdown("#### 自動化の提案（概要）")
+            for p in a["proposals"]:
+                st.write(f"- {p}")
+
+        st.divider()
+        st.markdown("**この提案で具体化を進めますか？（IN/OUT/TOヒアリングへ）**")
+        c1, c2 = st.columns([1,1])
+        with c1:
+            if st.button("この提案で進める（第2プロンプトへ）", type="primary", use_container_width=True):
+                st.session_state.step = 3
+                st.rerun()
+        with c2:
+            if st.button("やり直す（Step1へ）", use_container_width=True):
+                st.session_state.step = 1
+                st.rerun()
+
+# ========== STEP 3: 第2プロンプト（IN/OUT/TOヒアリング） ==========
+elif st.session_state.step == 3:
+    st.subheader("Step 3｜仕様ヒアリング（IN / OUT / TO）")
+    with st.form("io_form", clear_on_submit=False):
+        st.markdown("**IN（入力データ）**")
+        in_desc = st.text_area("どんなデータを取り込みますか？形式・取得元など", height=120)
+
+        st.markdown("**OUT（出力）**")
+        out_desc = st.text_area("生成物は？例：PDFレポート/CSV/Slack投稿 など", height=120)
+
+        st.markdown("**TO（保存・送付先）**")
+        to_place = st.selectbox(
+            "保存・送付先",
+            ["ローカルPC", "Linodeサーバー", "メール送付", "S3互換ストレージ"],
+        )
+
+        st.markdown("**追加条件**")
+        budget = st.radio("有料アカウントの利用", ["できるだけ無料", "必要なら有料OK"], index=0)
+        note = st.text_input("補足（任意）")
+
+        submitted = st.form_submit_button("仕様を確定してSAVANへ渡す")
     if submitted:
-        # Check if all fields are empty
-        if all(value == "" for value in input_data.values()):
-            st.warning("分析を開始するには、いずれかの項目に内容を入力してください。")
-        else:
-            with st.spinner("お客様の声をローカルAIエンジンに安全に送信しています..."):
-                try:
-                    # Send the data as a JSON payload to the ngrok URL
-                    api_endpoint = f"{NGROK_URL}/process" # Assuming the local app has a /process endpoint
-                    response = requests.post(api_endpoint, json=input_data, timeout=60)
-                    response.raise_for_status() 
+        spec = {
+            "analysis": st.session_state.analysis,  # 第1結果を同梱
+            "io_spec": {
+                "IN": in_desc,
+                "OUT": out_desc,
+                "TO": to_place,
+                "BUDGET": budget,
+                "NOTE": note,
+            },
+            "timestamp": time.time(),
+        }
+        st.session_state.io_spec = spec
+        path = save_handoff(spec, prefix="iina_spec")
+        st.success(f"仕様を保存しました: {path}")
+        st.json(spec, expanded=False)
 
-                    st.success("ローカルAIエンジンからの応答を受信しました！")
-                    st.header("IINAによる分析結果")
-                    
-                    analysis_result = response.json()
-                    st.json(analysis_result)
-                    st.balloons()
-
-                except requests.exceptions.RequestException as e:
-                    st.error(f"ローカルAIエンジンへの送信中にエラーが発生しました: {e}")
-                    st.error("ヒント: ローカルPCでngrokとstreamlitアプリが両方とも起動しているか確認してください。")
-
+        st.info("次：SAVANがこの仕様JSONを取りに来てコード生成 → あなたに試作品を返す想定です。")
+        if st.button("最初の画面へ戻る"):
+            st.session_state.clear()
+            st.rerun()
