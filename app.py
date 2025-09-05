@@ -1,4 +1,3 @@
-# linode_frontend.py
 import os
 import streamlit as st
 import requests
@@ -8,6 +7,8 @@ st.title("IINA PoC - 課題受付フォーム")
 st.markdown("ローカルのIINA（ngrok経由）にデータを送り、提案概要を受け取ります。")
 
 NGROK_URL = os.environ.get("NGROK_URL", "").rstrip("/")
+IINA_KEY_PATH = os.environ.get("IINA_KEY_PATH", "")
+
 if not NGROK_URL:
     st.error("ローカルAIエンジンへの接続トンネル (NGROK_URL) が設定されていません。")
 else:
@@ -45,13 +46,11 @@ else:
         else:
             with st.spinner("ローカルAIエンジンへ送信中..."):
                 try:
-                    # POST先は ngrok のルート + /analyze (ローカル側と合わせる)
                     post_url = NGROK_URL + "/analyze"
                     resp = requests.post(post_url, json=input_data, timeout=60)
-                    resp.raise_for_status() # 200番台以外のステータスコードで例外を発生させる
+                    resp.raise_for_status()
                     result = resp.json()
 
-                    # 2枚目（提案概要＋簡易フロー）を描画
                     st.success("ローカルAIエンジンからの応答を受け取りました。")
 
                     st.markdown("## 提案概要")
@@ -69,8 +68,8 @@ else:
                     for p in result.get("proposals", []):
                         st.write("- " + p)
 
-                    st.json(result)  # デバッグ用に JSON 全体も表示
+                    st.json(result)  # デバッグ用
 
                 except requests.exceptions.RequestException as e:
                     st.error(f"ローカルAIエンジンへの送信中にエラー: {e}")
-                    st.error("確認: ローカルPCでngrokとIINA(FastAPI)が起動しているか、NGROK_URLが正しいか。")
+                    st.error(f"確認: ローカルPCでngrokとIINA(FastAPI)が起動しているか、NGROK_URL={NGROK_URL} が正しいか")
