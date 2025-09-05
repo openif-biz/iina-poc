@@ -1,100 +1,76 @@
-from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse
-from fastapi.middleware.cors import CORSMiddleware
+# linode_frontend.py
+import os
+import streamlit as st
+import requests
 
-app = FastAPI()
+st.set_page_config(page_title="IINA PoC - 受付", layout="wide")
+st.title("IINA PoC - 課題受付フォーム")
+st.markdown("ローカルのIINA（ngrok経由）にデータを送り、提案概要を受け取ります。")
 
-# CORS 設定（任意。ブラウザから自由にアクセスできるように）
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+NGROK_URL = os.environ.get("NGROK_URL", "").rstrip("/")
+if not NGROK_URL:
+    st.error("ローカルAIエンジンへの接続トンネル (NGROK_URL) が設定されていません。")
+else:
+    st.success(f"ローカルAIエンジン ({NGROK_URL}) への接続準備が完了しました。")
 
-# ルート：入力フォーム表示
-@app.get("/", response_class=HTMLResponse)
-def read_form():
-    html_content = """
-    <html>
-        <head>
-            <title>IINA PoC - 課題受付フォーム</title>
-        </head>
-        <body>
-            <h1>IINA PoC - 課題受付フォーム</h1>
-            <form action="/analyze" method="post">
-                <label>インプット:</label><br>
-                <input type="text" name="インプット"><br><br>
+    with st.form("iina_reception_form"):
+        st.header("自動化・効率化アンケート（例を参考に記入）")
 
-                <label>現状:</label><br>
-                <textarea name="現状" rows="4" cols="50"></textarea><br><br>
+        fields = {
+            "インプット": "例: 各社オリジナル形式の請求書のPDF",
+            "現状": "例: 一帳票ずつ読み取り→手入力で時間がかかる",
+            "課題": "例: 入力ミスが多く確認作業に追われる",
+            "目的": "例: マネジメントに集中したい",
+            "理想の状態": "例: 受注管理が自動化される",
+            "制約条件": "例: 追加コストを抑えたい（無料優先）",
+            "アウトプット": "例: Googleスプレッドシートへ自動入力"
+        }
 
-                <label>課題:</label><br>
-                <textarea name="課題" rows="4" cols="50"></textarea><br><br>
+        input_data = {}
+        for field, hint in fields.items():
+            st.subheader(field)
+            st.caption(hint)
+            key = f"f_{field}"
+            if field in ["現状", "課題", "目的", "理想の状態", "アウトプット"]:
+                input_data[field] = st.text_area(key, height=110)
+            else:
+                input_data[field] = st.text_input(key)
 
-                <label>目的:</label><br>
-                <textarea name="目的" rows="4" cols="50"></textarea><br><br>
+        submitted = st.form_submit_button("ローカルIINAに送信する")
 
-                <label>理想の状態:</label><br>
-                <textarea name="理想の状態" rows="4" cols="50"></textarea><br><br>
+    if submitted:
+        is_empty = all(isinstance(v, str) and v.strip() == "" for v in input_data.values())
+        if is_empty:
+            st.warning("いずれかの項目に入力してください。")
+        else:
+            with st.spinner("ローカルAIエンジンへ送信中..."):
+                try:
+                    # POST先は ngrok のルート + /analyze (ローカル側と合わせる)
+                    post_url = NGROK_URL + "/analyze"
+                    resp = requests.post(post_url, json=input_data, timeout=60)
+                    resp.raise_for_status() # 200番台以外のステータスコードで例外を発生させる
+                    result = resp.json()
 
-                <label>制約条件:</label><br>
-                <input type="text" name="制約条件"><br><br>
+                    # 2枚目（提案概要＋簡易フロー）を描画
+                    st.success("ローカルAIエンジンからの応答を受け取りました。")
 
-                <label>アウトプット:</label><br>
-                <textarea name="アウトプット" rows="4" cols="50"></textarea><br><br>
+                    st.markdown("## 提案概要")
+                    st.write(result.get("summary", "（要約がありません）"))
 
-                <input type="submit" value="分析実行">
-            </form>
-        </body>
-    </html>
-    """
-    return HTMLResponse(content=html_content)
+                    st.markdown("## 簡易フロー")
+                    flow = result.get("flow", [])
+                    if flow:
+                        for i, s in enumerate(flow, 1):
+                            st.write(f"{i}. {s}")
+                    else:
+                        st.write("（簡易フローがありません）")
 
-# /analyze：フォームデータ受け取り・簡易分析
-@app.post("/analyze", response_class=HTMLResponse)
-async def analyze_form(
-    インプット: str = Form(...),
-    現状: str = Form(...),
-    課題: str = Form(...),
-    目的: str = Form(...),
-    理想の状態: str = Form(...),
-    制約条件: str = Form(...),
-    アウトプット: str = Form(...)
-):
-    # 仮の分析処理（ここで本物のIINA解析に接続可能）
-    summary = f"【仮分析】入力「{インプット}」に対する提案を生成しました。"
-    flow = [
-        "ステップ1: データ取得",
-        "ステップ2: 入力確認",
-        "ステップ3: 自動化処理",
-    ]
-    proposals = [
-        "提案1: 手作業を削減",
-        "提案2: Googleスプレッドシートに自動入力",
-    ]
+                    st.markdown("## 追加提案")
+                    for p in result.get("proposals", []):
+                        st.write("- " + p)
 
-    # 結果表示用HTML
-    html_result = f"""
-    <html>
-        <head><title>分析結果</title></head>
-        <body>
-            <h1>提案概要</h1>
-            <p>{summary}</p>
+                    st.json(result)  # デバッグ用に JSON 全体も表示
 
-            <h2>簡易フロー</h2>
-            <ol>
-                {''.join(f'<li>{s}</li>' for s in flow)}
-            </ol>
-
-            <h2>追加提案</h2>
-            <ul>
-                {''.join(f'<li>{p}</li>' for p in proposals)}
-            </ul>
-
-            <br><a href="/">戻る</a>
-        </body>
-    </html>
-    """
-    return HTMLResponse(content=html_result)
+                except requests.exceptions.RequestException as e:
+                    st.error(f"ローカルAIエンジンへの送信中にエラー: {e}")
+                    st.error("確認: ローカルPCでngrokとIINA(FastAPI)が起動しているか、NGROK_URLが正しいか。")
