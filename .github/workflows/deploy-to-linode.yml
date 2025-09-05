@@ -1,32 +1,121 @@
 name: Deploy to Linode
+
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+
+  push:
+
+    branches:
+
+      - main
+
+  workflow_dispatch:
+
+
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+  deploy:
 
-      - name: Deploy to Linode via SSH
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.LINODE_HOST }}
-          username: root
-          key: ${{ secrets.LINODE_SSH_KEY }}
-          script: |
-            PROJECT_DIR="/root/iina-poc"
-            PROJECT_NAME="iina-poc"
-            set -e
-            cd ${PROJECT_DIR}
-            git fetch origin main
-            git reset --hard origin/main
-            sudo docker-compose -p ${PROJECT_NAME} down --remove-orphans || true
-            sudo docker-compose -p ${PROJECT_NAME} build --no-cache
-            sudo docker-compose -p ${PROJECT_NAME} up -d
-            sudo docker image prune -f
+    runs-on: ubuntu-latest
+
+
+
+    steps:
+
+      - name: Checkout code
+
+        uses: actions/checkout@v3
+
+
+
+      - name: Deploy to Linode via SSH
+
+        uses: appleboy/ssh-action@master
+
+        with:
+
+          host: ${{ secrets.LINODE_HOST }}
+
+          username: root
+
+          key: ${{ secrets.LINODE_SSH_KEY }}
+
+          script: |
+
+            # --- 変数定義 ---
+
+            PROJECT_DIR="/root/iina-poc"
+
+            PROJECT_NAME="iina-poc"
+
+            # --- スクリプト本体 ---
+
+            set -e
+
+            
+
+            # 1. プロジェクトディレクトリへ移動
+
+            echo "Changing to project directory..."
+
+            cd ${PROJECT_DIR}
+
+
+
+            # 2. GitHubから最新のソースコードを取得
+
+            echo "Fetching latest code from GitHub..."
+
+            git fetch origin main
+
+            git reset --hard origin/main
+
+
+
+            # ---【★★ここが最終修正点★★】---
+
+            # 3. GitHub Secretsから .env ファイルを生成する
+
+            echo "Creating .env file from GitHub Secrets..."
+
+            echo "NGROK_URL=${{ secrets.NGROK_URL }}" > .env
+
+
+
+            # 4. 既存のコンテナを停止・削除
+
+            echo "Stopping old containers..."
+
+            sudo docker-compose -p ${PROJECT_NAME} down --remove-orphans || true
+
+            
+
+            # 5. 古いイメージを強制的に削除（キャッシュ対策）
+
+            echo "Forcefully removing old image to prevent caching issues..."
+
+            sudo docker image rm ${PROJECT_NAME}_app || true
+
+
+
+            # 6. 新しいイメージをビルド
+
+            echo "Building new image..."
+
+            sudo docker-compose -p ${PROJECT_NAME} build --no-cache
+
+
+
+            # 7. 新しいコンテナを起動 (.env ファイルが自動で読み込まれる)
+
+            echo "Starting new container..."
+
+            sudo docker-compose -p ${PROJECT_NAME} up -d
+
+
+
+            # 8. 不要になったDockerイメージをクリーンアップ
+
+            echo "Pruning unused Docker images..."
+
+            sudo docker image prune -f
