@@ -19,41 +19,14 @@ jobs:
           host: ${{ secrets.LINODE_HOST }}
           username: root
           key: ${{ secrets.LINODE_SSH_KEY }}
-          # ---【★★ここが最終修正点★★】---
-          # タイムアウト時間を30分に延長
-          timeout: 30m
           script: |
-            # --- 変数定義 ---
             PROJECT_DIR="/root/iina-poc"
             PROJECT_NAME="iina-poc"
-            # --- スクリプト本体 ---
             set -e
-            
-            # 1. プロジェクトディレクトリへ移動
-            echo "Changing to project directory..."
             cd ${PROJECT_DIR}
-
-            # 2. GitHubから最新のソースコードを取得
-            echo "Fetching latest code from GitHub..."
             git fetch origin main
             git reset --hard origin/main
-
-            # 3. 既存のコンテナを停止・削除
-            echo "Stopping old containers..."
             sudo docker-compose -p ${PROJECT_NAME} down --remove-orphans || true
-            
-            # 4. 古いイメージを強制的に削除（キャッシュ対策）
-            echo "Forcefully removing old image to prevent caching issues..."
-            sudo docker image rm ${PROJECT_NAME}_app || true
-
-            # 5. 新しいイメージをビルド
-            echo "Building new image..."
             sudo docker-compose -p ${PROJECT_NAME} build --no-cache
-
-            # 6. 新しいコンテナを起動
-            echo "Starting new container..."
             sudo docker-compose -p ${PROJECT_NAME} up -d
-
-            # 7. 不要になったDockerイメージをクリーンアップ
-            echo "Pruning unused Docker images..."
             sudo docker image prune -f
