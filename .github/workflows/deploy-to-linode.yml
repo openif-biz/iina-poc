@@ -1,121 +1,48 @@
 name: Deploy to Linode
 
 on:
-
-  push:
-
-    branches:
-
-      - main
-
-  workflow_dispatch:
-
-
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
+  deploy:
+    runs-on: ubuntu-latest
 
-  deploy:
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    runs-on: ubuntu-latest
+      - name: Deploy to Linode via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.LINODE_HOST }}
+          username: root
+          key: ${{ secrets.LINODE_SSH_KEY }}
+          script: |
+            PROJECT_NAME="iina_poc_streamlit"
 
+            cd /root/${PROJECT_NAME}
 
+            # GitHubから最新コード取得
+            git fetch origin main
+            git reset --hard origin/main
 
-    steps:
+            # .env ファイル生成
+            echo "NGROK_URL=${{ secrets.NGROK_URL }}" > .env
 
-      - name: Checkout code
+            # 既存コンテナ停止・削除
+            sudo docker rm -f ${PROJECT_NAME}_app || true
 
-        uses: actions/checkout@v3
+            # 古いイメージ削除
+            sudo docker image rm ${PROJECT_NAME}_app || true
 
+            # 新しいイメージビルド
+            sudo docker build -t ${PROJECT_NAME}_app .
 
+            # 新しいコンテナ起動
+            sudo docker run -d --name ${PROJECT_NAME}_app -p 8080:8080 --env-file .env ${PROJECT_NAME}_app
 
-      - name: Deploy to Linode via SSH
-
-        uses: appleboy/ssh-action@master
-
-        with:
-
-          host: ${{ secrets.LINODE_HOST }}
-
-          username: root
-
-          key: ${{ secrets.LINODE_SSH_KEY }}
-
-          script: |
-
-            # --- 変数定義 ---
-
-            PROJECT_DIR="/root/iina-poc"
-
-            PROJECT_NAME="iina-poc"
-
-            # --- スクリプト本体 ---
-
-            set -e
-
-            
-
-            # 1. プロジェクトディレクトリへ移動
-
-            echo "Changing to project directory..."
-
-            cd ${PROJECT_DIR}
-
-
-
-            # 2. GitHubから最新のソースコードを取得
-
-            echo "Fetching latest code from GitHub..."
-
-            git fetch origin main
-
-            git reset --hard origin/main
-
-
-
-            # ---【★★ここが最終修正点★★】---
-
-            # 3. GitHub Secretsから .env ファイルを生成する
-
-            echo "Creating .env file from GitHub Secrets..."
-
-            echo "NGROK_URL=${{ secrets.NGROK_URL }}" > .env
-
-
-
-            # 4. 既存のコンテナを停止・削除
-
-            echo "Stopping old containers..."
-
-            sudo docker-compose -p ${PROJECT_NAME} down --remove-orphans || true
-
-            
-
-            # 5. 古いイメージを強制的に削除（キャッシュ対策）
-
-            echo "Forcefully removing old image to prevent caching issues..."
-
-            sudo docker image rm ${PROJECT_NAME}_app || true
-
-
-
-            # 6. 新しいイメージをビルド
-
-            echo "Building new image..."
-
-            sudo docker-compose -p ${PROJECT_NAME} build --no-cache
-
-
-
-            # 7. 新しいコンテナを起動 (.env ファイルが自動で読み込まれる)
-
-            echo "Starting new container..."
-
-            sudo docker-compose -p ${PROJECT_NAME} up -d
-
-
-
-            # 8. 不要になったDockerイメージをクリーンアップ
-
-            echo "Pruning unused Docker images..."
-
-            sudo docker image prune -f
+            # 不要イメージクリーンアップ
+            sudo docker image prune -f
