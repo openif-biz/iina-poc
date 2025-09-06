@@ -1,76 +1,77 @@
-# linode_frontend.py
+# FILE: app.py (Local_IINA - PoC 本番)
+# PURPOSE: Local AI engine for IINA PoC
+# Handles external server requests, analyzes user input, returns proposal + flow
+
+from flask import Flask, request, jsonify
+from llama_cpp import Llama
 import os
-import streamlit as st
-import requests
+import json
+import time
 
-st.set_page_config(page_title="IINA PoC - 受付", layout="wide")
-st.title("IINA PoC - 課題受付フォーム")
-st.markdown("ローカルのIINA（ngrok経由）にデータを送り、提案概要を受け取ります。")
+# --- Configuration ---
+MODEL_PATH = "../models/starcoder2-7b-Q4_K_M.gguf"
+MODEL_CTX = 4096
 
-NGROK_URL = os.environ.get("NGROK_URL", "").rstrip("/")
-if not NGROK_URL:
-    st.error("ローカルAIエンジンへの接続トンネル (NGROK_URL) が設定されていません。")
-else:
-    st.success(f"ローカルAIエンジン ({NGROK_URL}) への接続準備が完了しました。")
+# --- Load Local AI Model ---
+def load_model():
+    absolute_model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), MODEL_PATH))
+    if not os.path.exists(absolute_model_path):
+        raise FileNotFoundError(f"モデルが見つかりません: {absolute_model_path}")
+    llm = Llama(model_path=absolute_model_path, n_ctx=MODEL_CTX, n_gpu_layers=-1)
+    return llm
 
-    with st.form("iina_reception_form"):
-        st.header("自動化・効率化アンケート（例を参考に記入）")
+llm = load_model()
 
-        fields = {
-            "インプット": "例: 各社オリジナル形式の請求書のPDF",
-            "現状": "例: 一帳票ずつ読み取り→手入力で時間がかかる",
-            "課題": "例: 入力ミスが多く確認作業に追われる",
-            "目的": "例: マネジメントに集中したい",
-            "理想の状態": "例: 受注管理が自動化される",
-            "制約条件": "例: 追加コストを抑えたい（無料優先）",
-            "アウトプット": "例: Googleスプレッドシートへ自動入力"
-        }
+# --- Prompt Generation ---
+def create_prompt(user_input: str) -> str:
+    return f"""
+あなたは優秀なAIコンサルタント『IINA』です。
+ユーザー課題を分析し、提案概要と簡易業務フローをJSON形式で返してください。
+課題: {user_input}
+出力例:
+{{
+  "proposal": {{
+    "purpose": "目的を簡潔に記述",
+    "solution_name": "解決策名",
+    "summary": "概要説明"
+  }},
+  "workflow": [
+    {{"actor": "【貴社】", "action": "ステップ1"}},
+    {{"actor": "【IINA】", "action": "ステップ2"}},
+    {{"actor": "【IINA】", "action": "ステップ3"}}
+  ]
+}}
+"""
 
-        input_data = {}
-        for field, hint in fields.items():
-            st.subheader(field)
-            st.caption(hint)
-            key = f"f_{field}"
-            if field in ["現状", "課題", "目的", "理想の状態", "アウトプット"]:
-                input_data[field] = st.text_area(key, height=110)
-            else:
-                input_data[field] = st.text_input(key)
+# --- JSON Extraction ---
+import re
+def extract_json(text: str) -> dict:
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if match:
+        return json.loads(match.group(0))
+    else:
+        return {}
 
-        submitted = st.form_submit_button("ローカルIINAに送信する")
+# --- Flask App ---
+app = Flask(__name__)
 
-    if submitted:
-        is_empty = all(isinstance(v, str) and v.strip() == "" for v in input_data.values())
-        if is_empty:
-            st.warning("いずれかの項目に入力してください。")
-        else:
-            with st.spinner("ローカルAIエンジンへ送信中..."):
-                try:
-                    # POST先は ngrok のルート + /analyze (ローカル側と合わせる)
-                    post_url = NGROK_URL + "/analyze"
-                    resp = requests.post(post_url, json=input_data, timeout=60)
-                    resp.raise_for_status() # 200番台以外のステータスコードで例外を発生させる
-                    result = resp.json()
+@app.route("/analyze", methods=["POST"])
+def analyze():
+    data = request.json
+    if "user_input" not in data:
+        return jsonify({"error": "user_input missing"}), 400
+    
+    user_input = data["user_input"]
+    prompt = create_prompt(user_input)
+    
+    try:
+        output = llm(prompt, max_tokens=1024, stop=["\n"], echo=False)
+        text_response = output['choices'][0]['text']
+        result_json = extract_json(text_response)
+        return jsonify(result_json)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-                    # 2枚目（提案概要＋簡易フロー）を描画
-                    st.success("ローカルAIエンジンからの応答を受け取りました。")
-
-                    st.markdown("## 提案概要")
-                    st.write(result.get("summary", "（要約がありません）"))
-
-                    st.markdown("## 簡易フロー")
-                    flow = result.get("flow", [])
-                    if flow:
-                        for i, s in enumerate(flow, 1):
-                            st.write(f"{i}. {s}")
-                    else:
-                        st.write("（簡易フローがありません）")
-
-                    st.markdown("## 追加提案")
-                    for p in result.get("proposals", []):
-                        st.write("- " + p)
-
-                    st.json(result)  # デバッグ用に JSON 全体も表示
-
-                except requests.exceptions.RequestException as e:
-                    st.error(f"ローカルAIエンジンへの送信中にエラー: {e}")
-                    st.error("確認: ローカルPCでngrokとIINA(FastAPI)が起動しているか、NGROK_URLが正しいか。")
+# --- Run Server ---
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000)
