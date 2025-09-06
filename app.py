@@ -1,94 +1,86 @@
-import streamlit as st
 import json
-import time
-import requests  # SSHトンネル経由やHTTP経由でローカルAIへアクセス
+import requests
+import streamlit as st
 
-st.set_page_config(page_title="IINA PoC", layout="wide")
-st.title("IINA PoC - 本番仕様 (Linode窓口)")
+# ====== 設定 ======
+LOCAL_AI_URL = "http://localhost:8000/analyze"  
+# ↑ ローカルAI (AIPC) 側のAPIエンドポイント
+# SSHトンネルで接続する場合:
+# ssh -L 8000:localhost:8000 user@AIPC
 
-# --- セッション状態初期化 ---
+st.set_page_config(page_title="IINA PoC", page_icon="🤖", layout="wide")
+
+# ====== セッション初期化 ======
 if "step" not in st.session_state:
     st.session_state.step = 1
 if "analysis" not in st.session_state:
     st.session_state.analysis = None
 
-# --- ローカルAI呼び出し関数 ---
-def call_local_iina(user_text: str, timeout=60) -> dict:
-    """
-    ローカルAIにHTTPまたはSSHトンネル経由でアクセスし、分析結果を取得
-    """
+# ====== ローカルAI呼び出し ======
+def call_local_ai(user_text: str) -> dict:
+    payload = {"text": user_text}
     try:
-        # ★ 実際はSSHトンネル経由やHTTPリクエストをここで実装
-        # 仮例: requests.post("http://localhost:5000/analyze", json={"text": user_text})
-        # 下記はサンプル構造
-        response = {
-            "summary": f"提案概要: {user_text[:60]}...",
-            "flow": [
-                "入力データの整理",
-                "自動化可能タスクの特定",
-                "提案フロー作成",
-                "確認用レポート生成"
-            ],
-            "proposals": [
-                "無料ツール中心での最小自動化",
-                "将来拡張: 有料API連携でスケール"
-            ]
-        }
-        time.sleep(3)  # 疑似処理時間
-        return response
+        resp = requests.post(LOCAL_AI_URL, json=payload, timeout=120)
+        resp.raise_for_status()
+        return resp.json()
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": f"ローカルAI呼び出し失敗: {e}"}
 
-# --- STEP 1: 課題入力 ---
+# ====== ヘッダー ======
+st.title("IINA PoC（Linode窓口サーバー）")
+st.caption("Step1: 課題入力 → Step2: 提案概要 & 簡易フロー")
+
+# ========== STEP 1: ユーザー入力 ==========
 if st.session_state.step == 1:
-    st.subheader("Step1｜課題入力")
+    st.subheader("Step 1｜課題入力")
     user_text = st.text_area(
-        "業務課題や自動化したいことを日本語で入力してください",
-        height=180
+        "あなたの業務課題や自動化したいことを日本語で書いてください。",
+        height=180,
+        key="first_prompt_text",
+        placeholder="例）毎朝の売上CSV集計→グラフ→Slack共有を自動化したい… など",
     )
     col1, col2 = st.columns([1,1])
     with col1:
-        if st.button("分析実行"):
+        if st.button("分析する", type="primary", use_container_width=True):
             if not user_text.strip():
-                st.warning("入力が空です")
+                st.warning("入力が空です。内容を入力してください。")
             else:
-                with st.spinner("ローカルAIで分析中…"):
-                    st.session_state.analysis = call_local_iina(user_text.strip())
-                st.session_state.step = 2
-                st.rerun()
+                with st.spinner("ローカルAIが分析中です..."):
+                    result = call_local_ai(user_text.strip())
+                if "error" in result:
+                    st.error(result["error"])
+                else:
+                    st.session_state.analysis = result
+                    st.session_state.step = 2
+                    st.rerun()
     with col2:
-        if st.button("リセット"):
+        if st.button("リセット", use_container_width=True):
             st.session_state.clear()
             st.rerun()
 
-# --- STEP 2: 提案概要 & 簡易フロー表示 ---
+# ========== STEP 2: 提案表示 ==========
 elif st.session_state.step == 2:
     a = st.session_state.analysis
     if not a:
-        st.warning("分析結果がありません。Step1からやり直してください。")
-        if st.button("Step1へ戻る"):
-            st.session_state.step = 1
-            st.rerun()
-    elif "error" in a:
-        st.error(f"AI呼び出しでエラー: {a['error']}")
+        st.warning("分析結果が見つかりません。Step1からやり直してください。")
         if st.button("Step1へ戻る"):
             st.session_state.step = 1
             st.rerun()
     else:
-        st.subheader("Step2｜提案概要 & 簡易フロー")
-        with st.expander("提案概要", expanded=True):
-            st.write(a["summary"])
-        colA, colB = st.columns([1,1])
-        with colA:
+        st.subheader("Step 2｜提案概要 & 簡易フロー")
+        if "summary" in a:
+            with st.expander("要点要約", expanded=True):
+                st.write(a["summary"])
+        if "flow" in a:
             st.markdown("#### 簡易フロー")
             for i, step in enumerate(a["flow"], 1):
                 st.write(f"{i}. {step}")
-        with colB:
-            st.markdown("#### 自動化提案")
+        if "proposals" in a:
+            st.markdown("#### 自動化の提案（概要）")
             for p in a["proposals"]:
                 st.write(f"- {p}")
 
         st.divider()
-        if st.button("Step1へ戻る"):
-            st.session_state.step = 1
+        if st.button("最初に戻る", use_container_width=True):
+            st.session_state.clear()
             st.rerun()
