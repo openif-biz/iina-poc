@@ -1,77 +1,94 @@
-# FILE: app.py (Local_IINA - PoC 本番)
-# PURPOSE: Local AI engine for IINA PoC
-# Handles external server requests, analyzes user input, returns proposal + flow
-
-from flask import Flask, request, jsonify
-from llama_cpp import Llama
-import os
+import streamlit as st
 import json
 import time
+import requests  # SSHトンネル経由やHTTP経由でローカルAIへアクセス
 
-# --- Configuration ---
-MODEL_PATH = "../models/starcoder2-7b-Q4_K_M.gguf"
-MODEL_CTX = 4096
+st.set_page_config(page_title="IINA PoC", layout="wide")
+st.title("IINA PoC - 本番仕様 (Linode窓口)")
 
-# --- Load Local AI Model ---
-def load_model():
-    absolute_model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), MODEL_PATH))
-    if not os.path.exists(absolute_model_path):
-        raise FileNotFoundError(f"モデルが見つかりません: {absolute_model_path}")
-    llm = Llama(model_path=absolute_model_path, n_ctx=MODEL_CTX, n_gpu_layers=-1)
-    return llm
+# --- セッション状態初期化 ---
+if "step" not in st.session_state:
+    st.session_state.step = 1
+if "analysis" not in st.session_state:
+    st.session_state.analysis = None
 
-llm = load_model()
-
-# --- Prompt Generation ---
-def create_prompt(user_input: str) -> str:
-    return f"""
-あなたは優秀なAIコンサルタント『IINA』です。
-ユーザー課題を分析し、提案概要と簡易業務フローをJSON形式で返してください。
-課題: {user_input}
-出力例:
-{{
-  "proposal": {{
-    "purpose": "目的を簡潔に記述",
-    "solution_name": "解決策名",
-    "summary": "概要説明"
-  }},
-  "workflow": [
-    {{"actor": "【貴社】", "action": "ステップ1"}},
-    {{"actor": "【IINA】", "action": "ステップ2"}},
-    {{"actor": "【IINA】", "action": "ステップ3"}}
-  ]
-}}
-"""
-
-# --- JSON Extraction ---
-import re
-def extract_json(text: str) -> dict:
-    match = re.search(r'\{.*\}', text, re.DOTALL)
-    if match:
-        return json.loads(match.group(0))
-    else:
-        return {}
-
-# --- Flask App ---
-app = Flask(__name__)
-
-@app.route("/analyze", methods=["POST"])
-def analyze():
-    data = request.json
-    if "user_input" not in data:
-        return jsonify({"error": "user_input missing"}), 400
-    
-    user_input = data["user_input"]
-    prompt = create_prompt(user_input)
-    
+# --- ローカルAI呼び出し関数 ---
+def call_local_iina(user_text: str, timeout=60) -> dict:
+    """
+    ローカルAIにHTTPまたはSSHトンネル経由でアクセスし、分析結果を取得
+    """
     try:
-        output = llm(prompt, max_tokens=1024, stop=["\n"], echo=False)
-        text_response = output['choices'][0]['text']
-        result_json = extract_json(text_response)
-        return jsonify(result_json)
+        # ★ 実際はSSHトンネル経由やHTTPリクエストをここで実装
+        # 仮例: requests.post("http://localhost:5000/analyze", json={"text": user_text})
+        # 下記はサンプル構造
+        response = {
+            "summary": f"提案概要: {user_text[:60]}...",
+            "flow": [
+                "入力データの整理",
+                "自動化可能タスクの特定",
+                "提案フロー作成",
+                "確認用レポート生成"
+            ],
+            "proposals": [
+                "無料ツール中心での最小自動化",
+                "将来拡張: 有料API連携でスケール"
+            ]
+        }
+        time.sleep(3)  # 疑似処理時間
+        return response
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return {"error": str(e)}
 
-# --- Run Server ---
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000)
+# --- STEP 1: 課題入力 ---
+if st.session_state.step == 1:
+    st.subheader("Step1｜課題入力")
+    user_text = st.text_area(
+        "業務課題や自動化したいことを日本語で入力してください",
+        height=180
+    )
+    col1, col2 = st.columns([1,1])
+    with col1:
+        if st.button("分析実行"):
+            if not user_text.strip():
+                st.warning("入力が空です")
+            else:
+                with st.spinner("ローカルAIで分析中…"):
+                    st.session_state.analysis = call_local_iina(user_text.strip())
+                st.session_state.step = 2
+                st.rerun()
+    with col2:
+        if st.button("リセット"):
+            st.session_state.clear()
+            st.rerun()
+
+# --- STEP 2: 提案概要 & 簡易フロー表示 ---
+elif st.session_state.step == 2:
+    a = st.session_state.analysis
+    if not a:
+        st.warning("分析結果がありません。Step1からやり直してください。")
+        if st.button("Step1へ戻る"):
+            st.session_state.step = 1
+            st.rerun()
+    elif "error" in a:
+        st.error(f"AI呼び出しでエラー: {a['error']}")
+        if st.button("Step1へ戻る"):
+            st.session_state.step = 1
+            st.rerun()
+    else:
+        st.subheader("Step2｜提案概要 & 簡易フロー")
+        with st.expander("提案概要", expanded=True):
+            st.write(a["summary"])
+        colA, colB = st.columns([1,1])
+        with colA:
+            st.markdown("#### 簡易フロー")
+            for i, step in enumerate(a["flow"], 1):
+                st.write(f"{i}. {step}")
+        with colB:
+            st.markdown("#### 自動化提案")
+            for p in a["proposals"]:
+                st.write(f"- {p}")
+
+        st.divider()
+        if st.button("Step1へ戻る"):
+            st.session_state.step = 1
+            st.rerun()
