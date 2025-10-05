@@ -1,41 +1,44 @@
-# .github/workflows/deploy.yml
+# .github/workflows/deploy.yml (GanttLine方式への修正版)
 # IINA PoC FrontendをLinodeサーバーに自動デプロイするためのワークフロー
 
 name: Deploy IINA PoC to Linode
 
-# 実行のきっかけ (トリガー)
 on:
-  # mainブランチにpushされた時に、このワークフローが自動で実行されます
   push:
     branches:
       - main
 
-# 実行する一連のタスク
 jobs:
   deploy:
-    # ubuntuの最新版環境でジョブを実行します
+    # GanttLine方式: コミットメッセージに [to-linode] が含まれる場合のみ実行
+    if: "contains(github.event.head_commit.message, '[to-linode]')"
     runs-on: ubuntu-latest
 
-    # ジョブ内のステップ
     steps:
-      # 1. GitHubリポジトリのコードをチェックアウト(コピー)します
+      # ステップ1: リポジトリのコードをチェックアウトする
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      # 2. LinodeサーバーにSSHで接続し、デプロイコマンドを実行します
-      - name: Deploy to Linode via SSH
+      # GanttLine方式: ステップ2 - SCPで全ファイルをサーバーにコピーする
+      - name: Copy files to Linode
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.LINODE_HOST }}
+          username: root
+          key: ${{ secrets.LINODE_SSH_KEY }}
+          source: "."
+          # IINA用のディレクトリを指定
+          target: "/root/iina-poc"
+
+      # GanttLine方式: ステップ3 - SSHでDocker Composeを再起動する
+      - name: Restart with Docker Compose
         uses: appleboy/ssh-action@master
         with:
-          # サーバーのIPアドレス (GitHubのSecretsから安全に読み込み)
           host: ${{ secrets.LINODE_HOST }}
-          # ログインユーザー名
           username: root
-          # SSH秘密鍵 (GitHubのSecretsから安全に読み込み)
           key: ${{ secrets.LINODE_SSH_KEY }}
-          
-          # サーバー上で実行する一連のコマンド
           script: |
             set -e
             cd /root/iina-poc
-            git pull origin main
-            docker-compose up --build -d
+            docker-compose down
+            docker-compose up -d --build
