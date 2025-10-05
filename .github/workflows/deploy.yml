@@ -1,5 +1,4 @@
-# .github/workflows/deploy.yml (GanttLine方式への修正版)
-# IINA PoC FrontendをLinodeサーバーに自動デプロイするためのワークフロー
+# .github/workflows/deploy.yml (GanttLine完全準拠版)
 
 name: Deploy IINA PoC to Linode
 
@@ -19,9 +18,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # GanttLine方式: ステップ2 - SCPで全ファイルをサーバーにコピーする
+      # GanttLine方式: ステップ2 - scpで全ファイルをサーバーにコピーする (バージョンをGanttLineに完全統一)
       - name: Copy files to Linode
-        uses: appleboy/scp-action@master
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.LINODE_HOST }}
           username: root
@@ -30,9 +29,9 @@ jobs:
           # IINA用のディレクトリを指定
           target: "/root/iina-poc"
 
-      # GanttLine方式: ステップ3 - SSHでDocker Composeを再起動する
+      # GanttLine方式: ステップ3 - SSHでDocker Composeを再起動する (バージョンをGanttLineに完全統一)
       - name: Restart with Docker Compose
-        uses: appleboy/ssh-action@master
+        uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.LINODE_HOST }}
           username: root
