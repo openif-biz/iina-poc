@@ -1,1 +1,41 @@
-Set-Content -Path .\.github\workflows\deploy.yml -Value (Get-Clipboard -Raw)
+# .github/workflows/deploy.yml
+# IINA PoC FrontendをLinodeサーバーに自動デプロイするためのワークフロー
+
+name: Deploy IINA PoC to Linode
+
+# 実行のきっかけ (トリガー)
+on:
+  # mainブランチにpushされた時に、このワークフローが自動で実行されます
+  push:
+    branches:
+      - main
+
+# 実行する一連のタスク
+jobs:
+  deploy:
+    # ubuntuの最新版環境でジョブを実行します
+    runs-on: ubuntu-latest
+
+    # ジョブ内のステップ
+    steps:
+      # 1. GitHubリポジトリのコードをチェックアウト(コピー)します
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. LinodeサーバーにSSHで接続し、デプロイコマンドを実行します
+      - name: Deploy to Linode via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          # サーバーのIPアドレス (GitHubのSecretsから安全に読み込み)
+          host: ${{ secrets.LINODE_HOST }}
+          # ログインユーザー名
+          username: root
+          # SSH秘密鍵 (GitHubのSecretsから安全に読み込み)
+          key: ${{ secrets.LINODE_SSH_KEY }}
+          
+          # サーバー上で実行する一連のコマンド
+          script: |
+            set -e
+            cd /root/iina-poc
+            git pull origin main
+            docker-compose up --build -d
