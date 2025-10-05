@@ -1,0 +1,18 @@
+# docker-compose.yml for IINA PoC Frontend
+
+version: '3.8'
+
+services:
+  iina-frontend:
+    # Dockerfileが存在するカレントディレクトリをビルドのコンテキストとして使用
+    build: .
+    
+    # コンテナに分かりやすい名前を付けます
+    container_name: iina-frontend
+    
+    # サーバーが再起動した際などに、コンテナも自動で再起動させます
+    restart: always
+    
+    # サーバー(ホスト)の8501番ポートへのアクセスを、コンテナの8501番ポートへ転送します
+    ports:
+      - "8501:8501"
